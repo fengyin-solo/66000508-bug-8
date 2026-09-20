@@ -40,6 +40,21 @@ export interface OptimizationResult {
   converged: boolean
 }
 
+export interface ParamIssue {
+  field: string
+  reason: string
+}
+
+export interface OptimizationErrorDetail {
+  code: string
+  message: string
+  issues: ParamIssue[]
+  limits?: Record<string, [number, number]>
+  normalized?: Partial<OptimizationParams>
+  upperBounds?: Record<string, number>
+  recommendedParams?: Partial<OptimizationParams>
+}
+
 export const TEST_FUNCTIONS: TestFunction[] = [
   { id: 'rosenbrock', name: 'Rosenbrock 香蕉函数', formula: 'f=(1-x)²+100(y-x²)²', xRange: [-2, 2], yRange: [-1, 3] },
   { id: 'himmelblau', name: 'Himmelblau函数', formula: 'f=(x²+y-11)²+(x+y²-7)²', xRange: [-6, 6], yRange: [-6, 6] },

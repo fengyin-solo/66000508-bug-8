@@ -31,8 +31,38 @@
       </el-form-item>
       <el-form-item>
         <el-button type="primary" @click="run" :loading="store.loading">🚀 开始优化</el-button>
+        <el-button v-if="store.lastGoodParams" @click="restoreLastGood" size="default">↩ 恢复上次可用参数</el-button>
       </el-form-item>
     </el-form>
+
+    <el-alert v-if="clientIssues.length" type="warning" :closable="false" class="param-alert" title="参数超出允许范围，未提交">
+      <ul class="issue-list">
+        <li v-for="(issue, i) in clientIssues" :key="i">{{ issue.reason }}</li>
+      </ul>
+    </el-alert>
+
+    <el-alert v-if="store.error" type="error" :closable="false" class="param-alert" :title="store.error.message">
+      <ul v-if="store.error.issues?.length > 1" class="issue-list">
+        <li v-for="(issue, i) in store.error.issues" :key="i">{{ issue.reason }}</li>
+      </ul>
+      <div v-if="limitEntries.length" class="limits">
+        <span class="limits-title">推荐范围：</span>
+        <el-tag v-for="[field, range] in limitEntries" :key="field" size="small" class="limit-tag">
+          {{ labelOf(field) }} [{{ range[0] }}, {{ range[1] }}]
+        </el-tag>
+        <el-tag v-for="(ub, field) in store.error.upperBounds" :key="'ub-'+field" size="small" type="danger" class="limit-tag">
+          {{ labelOf(field) }}上限 ≈ {{ ub }}
+        </el-tag>
+      </div>
+      <div class="alert-actions">
+        <el-button v-if="store.error.recommendedParams" size="small" type="primary" @click="applyRecommended">
+          ✨ 使用推荐参数并重新运行
+        </el-button>
+        <el-button v-if="store.lastGoodParams" size="small" @click="restoreLastGood">
+          ↩ 恢复上次可用参数
+        </el-button>
+      </div>
+    </el-alert>
 
     <div class="animation-bar" v-if="store.result">
       <div class="anim-controls">
@@ -48,21 +78,59 @@
 
 <script setup lang="ts">
 import { reactive, ref, computed, watch } from 'vue'
+import { ElMessage } from 'element-plus'
 import { useOptimizationStore } from '../store/optimization'
 import { TEST_FUNCTIONS, ALGORITHMS } from '../types'
-const store = useOptimizationStore()
-const form = reactive({
-  algorithm: 'gradient_descent', functionId: 'rosenbrock',
-  x0: -1.5, y0: 2.5, learningRate: 0.01, iterations: 100,
-  momentum: 0.9, temperature: 100, coolingRate: 0.95
-})
+import type { OptimizationParams, ParamIssue } from '../types'
+import {
+  DEFAULT_PARAMS, FIELD_LABELS, normalizeParams, validateParams,
+  type ParamsForm
+} from '../utils/params'
 
+const store = useOptimizationStore()
+
+// 刷新后回到面板：优先回填上次跑通的那组，否则用默认值
+const form = reactive<ParamsForm>(
+  normalizeParams(store.lastGoodParams ?? { ...DEFAULT_PARAMS }).params as ParamsForm
+)
+
+const clientIssues = ref<ParamIssue[]>([])
 const animStep = ref(0)
 const maxStep = computed(() => Math.max(0, (store.result?.path.length || 1) - 1))
+const limitEntries = computed(() => Object.entries(store.error?.limits ?? {}))
 
 watch(() => store.animationStep, (v) => { animStep.value = v })
 
-function run() { store.runOptimization({ ...form } as any) }
+function labelOf(field: string) { return FIELD_LABELS[field] ?? field }
+
+function run() {
+  // 空着或只填一半时按默认值补全，并回显到面板上
+  const { params, filled } = normalizeParams(form)
+  Object.assign(form, params)
+  if (filled.length) {
+    ElMessage.info(`已按默认值补全：${filled.map(labelOf).join('、')}`)
+  }
+  clientIssues.value = validateParams(params)
+  if (clientIssues.value.length) return
+  store.runOptimization(params)
+}
+
+function applyRecommended() {
+  const rec = store.error?.recommendedParams
+  if (!rec) return
+  Object.assign(form, rec)
+  clientIssues.value = []
+  run()
+}
+
+function restoreLastGood() {
+  if (!store.lastGoodParams) return
+  Object.assign(form, store.lastGoodParams as OptimizationParams)
+  clientIssues.value = []
+  store.error = null
+  ElMessage.success('已恢复上次跑通的参数')
+}
+
 function onSlider(v: number) { store.setStep(v); store.pauseAnimation() }
 </script>
 
@@ -71,4 +139,10 @@ function onSlider(v: number) { store.setStep(v); store.pauseAnimation() }
 .animation-bar { display:flex; align-items:center; margin-top:12px; padding-top:12px; border-top:1px solid #eee }
 .anim-controls { display:flex; gap:6px }
 .step-text { font-size:13px; color:#666; white-space:nowrap }
+.param-alert { margin-top:12px }
+.issue-list { margin:4px 0 0; padding-left:18px }
+.limits { margin-top:8px; display:flex; flex-wrap:wrap; align-items:center; gap:6px }
+.limits-title { font-size:12px; color:#666 }
+.limit-tag { font-family:monospace }
+.alert-actions { margin-top:10px; display:flex; gap:8px }
 </style>
