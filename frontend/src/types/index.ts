@@ -19,9 +19,27 @@ export interface OptimizationParams {
   y0: number
   learningRate: number
   iterations: number
+  momentum: number
+  temperature: number
+  coolingRate: number
+}
+
+export interface ParameterRecommendations {
+  learningRate?: number
+  maxLearningRate?: number
   momentum?: number
-  temperature?: number
-  coolingRate?: number
+  maxMomentum?: number
+  iterations?: number | null
+  maxIterations?: number
+  currentSafeIterations?: number
+}
+
+export interface ValidationResponse {
+  valid: boolean
+  params: OptimizationParams
+  failedStep?: number | null
+  reason?: string | null
+  recommendations?: ParameterRecommendations | null
 }
 
 export interface IterationPoint {
